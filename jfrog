@@ -1,0 +1,39 @@
+ROOT_PATH="/home/ubuntu"
+
+mkdir -p $ROOT_PATH/artifactory/var/etc/
+cd $ROOT_PATH/artifactory/var/etc/
+echo "shared:
+  database:
+    driver: org.postgresql.Driver
+    type: postgresql
+    url: jdbc:postgresql://postgres_container:5432/artifactorydb
+    username: artifactory
+    password: password1234" > ./system.yaml
+sudo chown -R 1030:1030 $ROOT_PATH/artifactory/var
+
+docker network create artifactory --driver=bridge
+
+DB_USER=artifactory
+DB_NAME=artifactorydb
+DB_CONTAINER=postgres_container
+DB_PASS=password1234
+MAX_RETRIES=40
+SLEEP_TIME=1
+
+docker run --name $DB_CONTAINER -itd -e POSTGRES_USER=$DB_USER -e POSTGRES_PASSWORD=$DB_PASS -e POSTGRES_DB=$DB_NAME -p 5432:5432 --network=artifactory library/postgres
+
+# Loop until PostgreSQL is ready or max retries are reached
+RETRY_COUNT=0
+until docker exec "$DB_CONTAINER" pg_isready -U "$DB_USER" -d "$DB_NAME" >/dev/null 2>&1; do
+  if [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; then
+    echo "Error: PostgreSQL did not become ready in time."
+    exit 1
+  fi
+  echo "PostgreSQL is not ready yet... retrying in $SLEEP_TIME seconds."
+  sleep "$SLEEP_TIME"
+  ((RETRY_COUNT++))
+done
+
+echo "PostgreSQL is ready and accepting connections!"
+
+docker run --name artifactory -v $ROOT_PATH/artifactory/var/:/var/opt/jfrog/artifactory -d -p 8081:8081 -p 8082:8082 --network=artifactory releases-docker.jfrog.io/jfrog/artifactory-pro:latest

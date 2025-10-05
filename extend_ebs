@@ -1,0 +1,24 @@
+echo "STEP_1: Current size"
+df -h
+echo 
+
+echo "STEP_2: list block devices in ec2"
+lsblk
+echo
+
+echo "STEP_3: Free /tmp to run growpart commadn to extend ebs"
+sudo rm -rf /tmp/*
+# Increase memory of /tmp from 5MB to 10MB for safer side
+sudo mount -o size=10M,rw,nodev,nosuid -t tmpfs tmpfs /tmp
+echo 
+
+echo "STEP_4: Extend the partition before you can extend the file system"
+sudo growpart /dev/xvda 1
+echo 
+
+echo "STEP_5: Last but not least, we need to extend the filesystem itself."
+sudo resize2fs /dev/xvda1
+echo 
+
+echo "STEP_6: Finally, we extended the filesystem"
+df -h
